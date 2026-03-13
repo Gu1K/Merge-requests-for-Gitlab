@@ -41,6 +41,7 @@ struct ContentView: View {
                         List(mrs) { mr in
                             MRRow(mr: mr)
                         }
+                        .id(viewModel.refreshID) // Force le re-render pour les badges
                         .listStyle(.inset)
                     }
                 }
@@ -55,16 +56,28 @@ struct ContentView: View {
     
     var footer: some View {
         HStack(spacing: 15) {
-            SettingsLink { Image(systemName: "gearshape") }.buttonStyle(.plain)
+            SettingsLink {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.plain)
+            .help(L10n.helpSettings)
+            
             Button { Task { await viewModel.fetchAll(token: apiToken) } } label: {
                 Image(systemName: "arrow.clockwise")
-            }.buttonStyle(.plain)
+            }
+            .buttonStyle(.plain)
+            .help(L10n.helpRefresh)
+            
             Button { withAnimation { viewModel.markAllAsRead() } } label: {
                 Image(systemName: "checkmark.circle")
-            }.buttonStyle(.plain).help("Marquer tout comme lu")
+            }
+            .buttonStyle(.plain)
+            .help(L10n.helpMarkRead)
+            
             Spacer()
             if viewModel.isLoading { ProgressView().controlSize(.small) }
             Spacer()
+            
             Button(L10n.quit) { NSApplication.shared.terminate(nil) }.controlSize(.small)
         }
         .padding(12).background(Color(NSColor.windowBackgroundColor))
@@ -73,6 +86,7 @@ struct ContentView: View {
 
 struct MRRow: View {
     let mr: MergeRequest
+    
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(spacing: 6) {
@@ -84,17 +98,12 @@ struct MRRow: View {
                     }
                     .frame(width: 36, height: 36)
                     .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(statusColor, lineWidth: mr.approvalStatus != .none ? 3 : 0)
-                    )
+                    .overlay(Circle().stroke(statusColor, lineWidth: mr.approvalStatus != .none ? 3 : 0))
 
                     if mr.approvalStatus == .approved {
                         Image(systemName: "checkmark.seal.fill")
-                            .resizable()
-                            .frame(width: 14, height: 14)
-                            .foregroundColor(.green)
-                            .background(Color.white.clipShape(Circle()))
+                            .resizable().frame(width: 14, height: 14)
+                            .foregroundColor(.green).background(Color.white.clipShape(Circle()))
                             .offset(x: 4, y: 4)
                     }
                 }
@@ -111,7 +120,7 @@ struct MRRow: View {
             }
             .frame(width: 44)
             
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top) {
                     if mr.draft {
                         Text("DRAFT").font(.system(size: 9, weight: .bold)).padding(.horizontal, 4).padding(.vertical, 2).background(Color.gray.opacity(0.2)).cornerRadius(4)
@@ -119,14 +128,11 @@ struct MRRow: View {
                     Text(mr.title).fontWeight(.semibold).font(.system(size: 14)).lineLimit(2)
                         .foregroundColor(mr.approvalStatus == .approved ? .secondary : .primary)
                 }
-                HStack(spacing: 4) {
-                    Text(mr.references.full).fontWeight(.bold)
-                    Text("•")
-                    Text("\(L10n.createdBy) \(mr.author.name)")
-                    Text("•")
-                    Text(mr.createdAt.relativeTime())
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mr.references.full).font(.system(size: 11, weight: .bold)).foregroundColor(.secondary).lineLimit(1)
+                    Text("\(L10n.createdBy) \(mr.author.name) • \(mr.createdAt.relativeTime())").font(.system(size: 11)).foregroundColor(.secondary)
                 }
-                .font(.system(size: 11)).foregroundColor(.secondary)
 
                 if !mr.labels.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -138,6 +144,7 @@ struct MRRow: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 8).contentShape(Rectangle())
         .onTapGesture { if let url = URL(string: mr.webUrl) { NSWorkspace.shared.open(url) } }
@@ -147,7 +154,7 @@ struct MRRow: View {
         switch mr.approvalStatus {
         case .approved: return .green
         case .requestChanges: return .red
-        case .none: return .clear
+        default: return .clear
         }
     }
     
@@ -159,20 +166,21 @@ struct MRRow: View {
     }
 }
 
+// --- VUE DES RÉGLAGES (DÉPLACÉE EN DEHORS POUR LE SCOPE) ---
 struct SettingsView: View {
     @AppStorage("gitlabToken") private var apiToken: String = ""
     @AppStorage("refreshInterval") private var refreshInterval: Double = 30.0
+    
     var body: some View {
         Form {
-            Section {
-                SecureField("GitLab Personal Access Token :", text: $apiToken).textFieldStyle(.roundedBorder)
-            } header: { Text(L10n.configTitle).fontWeight(.bold) }
-            Section {
-                Picker(L10n.refreshDelay, selection: $refreshInterval) {
+            Section(header: Text(L10n.configTitle).fontWeight(.bold)) {
+                SecureField("Token", text: $apiToken).textFieldStyle(.roundedBorder)
+            }
+            Section(header: Text(L10n.refreshDelay).fontWeight(.bold)) {
+                Picker(L10n.seconds, selection: $refreshInterval) {
                     Text("15 \(L10n.seconds)").tag(15.0)
                     Text("30 \(L10n.seconds)").tag(30.0)
                     Text("1 \(L10n.minute)").tag(60.0)
-                    Text("2 \(L10n.minute)s").tag(120.0)
                     Text("5 \(L10n.minute)s").tag(300.0)
                 }
             }
@@ -185,7 +193,7 @@ extension Date {
     func relativeTime() -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        formatter.locale = Locale(identifier: L10n.language)
+        formatter.locale = Locale(identifier: L10n.isFrench ? "fr" : "en")
         return formatter.localizedString(for: self, relativeTo: Date())
     }
 }

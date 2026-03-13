@@ -7,7 +7,6 @@ enum L10n {
     
     static var isFrench: Bool { language.hasPrefix("fr") }
     
-    // Traductions
     static var tabMine: String { isFrench ? "Mes MRs" : "My MRs" }
     static var tabReview: String { isFrench ? "À réviser" : "To Review" }
     static var tokenMissing: String { isFrench ? "Token manquant" : "Missing Token" }
@@ -22,4 +21,7 @@ enum L10n {
     static var refreshDelay: String { isFrench ? "Délai de rafraîchissement" : "Refresh Delay" }
     static var seconds: String { isFrench ? "secondes" : "seconds" }
     static var minute: String { isFrench ? "minute" : "minute" }
+    static var helpSettings: String { isFrench ? "Paramètres" : "Settings" }
+    static var helpRefresh: String { isFrench ? "Rafraîchir maintenant" : "Refresh now" }
+    static var helpMarkRead: String { isFrench ? "Marquer tout comme lu" : "Mark all as read" }
 }
