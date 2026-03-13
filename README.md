@@ -31,8 +31,3 @@ To use this app, you need a **Personal Access Token** from GitLab:
 1. Go to your GitLab **User Settings > Access Tokens**.
 2. Create a new token with the `read_api` scope.
 3. Copy the token.
-
-### 3. Installation
-1. Clone the repository:
-   ```bash
-   git clone git@github.com:Gu1K/Merge-requests-for-Gitlab.git
