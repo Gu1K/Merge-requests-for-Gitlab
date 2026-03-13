@@ -19,21 +19,19 @@ struct ContentView: View {
                     VStack(spacing: 10) {
                         Image(systemName: "key.fill").font(.largeTitle)
                         Text("Token manquant").fontWeight(.bold)
-                        Text("Allez dans les réglages (⌘,)").font(.caption)
+                        Text("Ouvrez les réglages pour configurer l'accès.")
+                            .font(.caption).foregroundColor(.secondary)
                     }
-                    .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.isLoading && viewModel.createdMRs.isEmpty && viewModel.assignedMRs.isEmpty {
-                    ProgressView("Chargement...").frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     let mrs = selectedTab == 0 ? viewModel.createdMRs : viewModel.assignedMRs
-                    
                     if mrs.isEmpty {
                         VStack {
-                            Image(systemName: "checkmark.circle").font(.largeTitle).padding(.bottom, 5)
-                            Text("Tout est à jour !").fontWeight(.medium)
+                            Image(systemName: "tray").font(.largeTitle)
+                            Text("Aucune MR en cours").foregroundColor(.secondary)
                         }
-                        .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         List(mrs) { mr in
@@ -43,21 +41,16 @@ struct ContentView: View {
                     }
                 }
             }
-            .frame(minHeight: 300, maxHeight: 600)
+            .frame(minHeight: 350)
 
             Divider()
-            
             footer
         }
-        .onAppear {
-            if !apiToken.isEmpty {
-                Task { await viewModel.fetchAll(token: apiToken) }
-            }
-        }
+        .onAppear { if !apiToken.isEmpty { Task { await viewModel.fetchAll(token: apiToken) } } }
     }
     
     var footer: some View {
-        HStack(spacing: 15) {
+        HStack {
             SettingsLink {
                 Image(systemName: "gearshape")
             }
@@ -66,17 +59,13 @@ struct ContentView: View {
             Button {
                 Task { await viewModel.fetchAll(token: apiToken) }
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.clockwise")
-                    if viewModel.isLoading { Text("...").font(.caption) }
-                }
+                Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.plain)
-
+            
             Spacer()
             
             Button("Quitter") { NSApplication.shared.terminate(nil) }
-                .buttonStyle(.bordered)
                 .controlSize(.small)
         }
         .padding(10)
@@ -84,48 +73,86 @@ struct ContentView: View {
     }
 }
 
+// --- SOUS-VUE POUR CHAQUE LIGNE DE MR ---
 struct MRRow: View {
     let mr: MergeRequest
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                if mr.draft {
-                    Text("DRAFT")
-                        .font(.system(size: 8, weight: .bold))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.2))
-                        .cornerRadius(3)
-                }
-                Text(mr.title)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .font(.system(size: 13))
+        HStack(alignment: .top, spacing: 10) {
+            AsyncImage(url: URL(string: mr.author.avatarUrl ?? "")) { image in
+                image.resizable()
+            } placeholder: {
+                Circle().fill(Color.gray.opacity(0.3))
             }
-            Text(mr.references.full)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(.accentColor)
+            .frame(width: 28, height: 28)
+            .clipShape(Circle())
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .top) {
+                    if mr.draft {
+                        Text("DRAFT").font(.system(size: 8, weight: .bold)).padding(2).background(Color.gray.opacity(0.2)).cornerRadius(3)
+                    }
+                    Text(mr.title).fontWeight(.medium).font(.system(size: 13)).lineLimit(2)
+                }
+                
+                Text("\(mr.references.full) • \(mr.createdAt.relativeTime())")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+
+                if !mr.labels.isEmpty {
+                    HStack {
+                        ForEach(mr.labels, id: \.self) { label in
+                            Text(label)
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(labelColor(label).opacity(0.15))
+                                .foregroundColor(labelColor(label))
+                                .cornerRadius(4)
+                        }
+                    }
+                }
+            }
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-        .onTapGesture {
-            if let url = URL(string: mr.webUrl) {
-                NSWorkspace.shared.open(url)
-            }
-        }
+        .onTapGesture { if let url = URL(string: mr.webUrl) { NSWorkspace.shared.open(url) } }
+    }
+    
+    func labelColor(_ label: String) -> Color {
+        let l = label.lowercased()
+        if l.contains("feature") || l.contains("🚀") { return .blue }
+        if l.contains("bug") || l.contains("🐛") { return .red }
+        return .secondary
     }
 }
 
+// --- VUE DES RÉGLAGES ---
 struct SettingsView: View {
     @AppStorage("gitlabToken") private var apiToken: String = ""
+    
     var body: some View {
         Form {
-            Section(header: Text("Configuration GitLab").fontWeight(.bold)) {
-                SecureField("Personal Access Token :", text: $apiToken)
+            Section {
+                SecureField("GitLab Personal Access Token :", text: $apiToken)
                     .textFieldStyle(.roundedBorder)
+                Text("Nécessite le scope 'read_api'.")
+                    .font(.caption).foregroundColor(.secondary)
+            } header: {
+                Text("Configuration").fontWeight(.bold)
             }
         }
         .padding(30)
-        .frame(width: 450)
+        .frame(width: 400, height: 120)
+    }
+}
+
+// Extension pour le temps relatif
+extension Date {
+    func relativeTime() -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        formatter.locale = Locale(identifier: "fr_FR")
+        return formatter.localizedString(for: self, relativeTo: Date())
     }
 }

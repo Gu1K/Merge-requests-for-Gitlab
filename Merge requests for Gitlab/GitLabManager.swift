@@ -5,23 +5,31 @@ import Combine
 
 struct MergeRequest: Identifiable, Decodable, Hashable {
     let id: Int
-    let iid: Int
     let title: String
     let webUrl: String
     let references: Reference
     let draft: Bool
+    let labels: [String]
+    let author: Author
+    let createdAt: Date
     
-    // Pour éviter les doublons lors de la fusion des listes
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-    static func == (lhs: MergeRequest, rhs: MergeRequest) -> Bool {
-        return lhs.id == rhs.id
-    }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    static func == (lhs: MergeRequest, rhs: MergeRequest) -> Bool { lhs.id == rhs.id }
     
     enum CodingKeys: String, CodingKey {
-        case id, iid, title, references, draft
+        case id, title, references, draft, labels, author
         case webUrl = "web_url"
+        case createdAt = "created_at"
+    }
+}
+
+struct Author: Decodable, Hashable {
+    let name: String
+    let avatarUrl: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case name
+        case avatarUrl = "avatar_url"
     }
 }
 
@@ -41,6 +49,14 @@ class GitLabViewModel: ObservableObject {
     @Published var assignedMRs: [MergeRequest] = []
     @Published var isLoading = false
     
+    private let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ"
+        decoder.dateDecodingStrategy = .formatted(formatter)
+        return decoder
+    }()
+    
     func fetchAll(token: String) async {
         guard !token.isEmpty else { return }
         isLoading = true
@@ -49,26 +65,23 @@ class GitLabViewModel: ObservableObject {
             let currentUser = try await fetchCurrentUser(token: token)
             let userId = currentUser.id
             
-            // 1. On récupère les MRs créées par toi
             async let authored = fetchMRs(token: token, endpoint: "state=opened&scope=all&author_id=\(userId)")
-            
-            // 2. On récupère les MRs assignées à toi (ton cas sur la capture)
             async let assigned = fetchMRs(token: token, endpoint: "state=opened&scope=all&assignee_id=\(userId)")
-            
-            // 3. On récupère les MRs où tu es Reviewer (onglet 2)
             async let reviews = fetchMRs(token: token, endpoint: "state=opened&scope=all&reviewer_id=\(userId)")
             
-            // Fusion des MRs créées et assignées pour l'onglet 1 (sans doublons)
-            let combinedCreated = Array(Set(try await authored + (try await assigned)))
-                .sorted(by: { $0.id > $1.id })
+            let authoredList = try await authored
+            let assignedList = try await assigned
+            let reviewsList = try await reviews
             
-            self.createdMRs = combinedCreated
-            self.assignedMRs = try await reviews
+            // Fusion Onglet 1 (Mes MRs + Assignées)
+            let combined = Array(Set(authoredList + assignedList)).sorted(by: { $0.createdAt > $1.createdAt })
+            
+            self.createdMRs = combined
+            self.assignedMRs = reviewsList.sorted(by: { $0.createdAt > $1.createdAt })
             
         } catch {
             print("Erreur GitLab : \(error)")
         }
-        
         isLoading = false
     }
     
@@ -77,7 +90,7 @@ class GitLabViewModel: ObservableObject {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, _) = try await URLSession.shared.data(for: request)
-        return try JSONDecoder().decode(GitLabUser.self, from: data)
+        return try decoder.decode(GitLabUser.self, from: data)
     }
     
     private func fetchMRs(token: String, endpoint: String) async throws -> [MergeRequest] {
@@ -86,6 +99,6 @@ class GitLabViewModel: ObservableObject {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, _) = try await URLSession.shared.data(for: request)
-        return try JSONDecoder().decode([MergeRequest].self, from: data)
+        return try decoder.decode([MergeRequest].self, from: data)
     }
 }
