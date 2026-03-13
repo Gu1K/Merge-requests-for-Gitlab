@@ -41,7 +41,7 @@ struct ContentView: View {
                         List(mrs) { mr in
                             MRRow(mr: mr)
                         }
-                        .id(viewModel.refreshID) // Force le re-render pour les badges
+                        .id(viewModel.refreshID)
                         .listStyle(.inset)
                     }
                 }
@@ -166,7 +166,6 @@ struct MRRow: View {
     }
 }
 
-// --- VUE DES RÉGLAGES (DÉPLACÉE EN DEHORS POUR LE SCOPE) ---
 struct SettingsView: View {
     @AppStorage("gitlabToken") private var apiToken: String = ""
     @AppStorage("refreshInterval") private var refreshInterval: Double = 30.0
