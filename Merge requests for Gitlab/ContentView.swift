@@ -72,12 +72,27 @@ struct MRRow: View {
     let mr: MergeRequest
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            AsyncImage(url: URL(string: mr.author.avatarUrl ?? "")) { image in
-                image.resizable()
-            } placeholder: {
-                Circle().fill(Color.gray.opacity(0.3))
+            // Colonne Avatar + Badge de commentaires
+            VStack(spacing: 6) {
+                AsyncImage(url: URL(string: mr.author.avatarUrl ?? "")) { image in
+                    image.resizable()
+                } placeholder: {
+                    Circle().fill(Color.gray.opacity(0.3))
+                }
+                .frame(width: 36, height: 36).clipShape(Circle())
+                
+                // Badge de commentaires plus gros
+                if mr.userNotesCount > 0 {
+                    Text("\(mr.userNotesCount)")
+                        .font(.system(size: 10, weight: .bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.1))
+                        .foregroundColor(.primary.opacity(0.8))
+                        .clipShape(Capsule())
+                }
             }
-            .frame(width: 34, height: 34).clipShape(Circle())
+            .frame(width: 44) // Largeur ajustée pour le badge plus gros
             
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top) {

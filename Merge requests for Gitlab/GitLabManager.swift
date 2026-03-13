@@ -12,6 +12,7 @@ struct MergeRequest: Identifiable, Decodable, Hashable {
     let labels: [String]
     let author: Author
     let createdAt: Date
+    let userNotesCount: Int
     
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: MergeRequest, rhs: MergeRequest) -> Bool { lhs.id == rhs.id }
@@ -20,6 +21,7 @@ struct MergeRequest: Identifiable, Decodable, Hashable {
         case id, title, references, draft, labels, author
         case webUrl = "web_url"
         case createdAt = "created_at"
+        case userNotesCount = "user_notes_count"
     }
 }
 
@@ -53,8 +55,6 @@ class GitLabViewModel: ObservableObject {
     
     init() {
         setupTimer()
-        
-        // Réagir au changement de délai dans les réglages
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .sink { [weak self] _ in
                 Task { @MainActor in self?.setupTimer() }
@@ -90,10 +90,12 @@ class GitLabViewModel: ObservableObject {
             
             let authoredList = try await authored
             let assignedList = try await assigned
+            let reviewsList = try await reviews
+            
             let combined = Array(Set(authoredList + assignedList)).sorted(by: { $0.createdAt > $1.createdAt })
             
             self.createdMRs = combined
-            self.assignedMRs = try await reviews
+            self.assignedMRs = reviewsList.sorted(by: { $0.createdAt > $1.createdAt })
         } catch {
             print("Erreur GitLab : \(error)")
         }
