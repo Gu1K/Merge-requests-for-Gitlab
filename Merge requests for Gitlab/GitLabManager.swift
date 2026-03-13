@@ -26,7 +26,6 @@ struct MergeRequest: Identifiable, Decodable, Hashable {
 struct Author: Decodable, Hashable {
     let name: String
     let avatarUrl: String?
-    
     enum CodingKeys: String, CodingKey {
         case name
         case avatarUrl = "avatar_url"
@@ -49,6 +48,8 @@ class GitLabViewModel: ObservableObject {
     @Published var assignedMRs: [MergeRequest] = []
     @Published var isLoading = false
     
+    private var cancellables = Set<AnyCancellable>()
+    
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         let formatter = DateFormatter()
@@ -57,9 +58,24 @@ class GitLabViewModel: ObservableObject {
         return decoder
     }()
     
+    init() {
+        // Rafraîchissement automatique toutes les 30 secondes
+        Timer.publish(every: 30, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                let token = UserDefaults.standard.string(forKey: "gitlabToken") ?? ""
+                Task { await self.fetchAll(token: token) }
+            }
+            .store(in: &cancellables)
+    }
+    
     func fetchAll(token: String) async {
         guard !token.isEmpty else { return }
-        isLoading = true
+        
+        if createdMRs.isEmpty && assignedMRs.isEmpty {
+            isLoading = true
+        }
         
         do {
             let currentUser = try await fetchCurrentUser(token: token)
@@ -73,7 +89,6 @@ class GitLabViewModel: ObservableObject {
             let assignedList = try await assigned
             let reviewsList = try await reviews
             
-            // Fusion Onglet 1 (Mes MRs + Assignées)
             let combined = Array(Set(authoredList + assignedList)).sorted(by: { $0.createdAt > $1.createdAt })
             
             self.createdMRs = combined

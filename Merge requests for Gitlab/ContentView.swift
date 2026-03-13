@@ -19,8 +19,7 @@ struct ContentView: View {
                     VStack(spacing: 15) {
                         Image(systemName: "key.fill").font(.system(size: 40))
                         Text(L10n.tokenMissing).font(.headline)
-                        Text(L10n.settingsInstruction)
-                            .font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(.center).padding(.horizontal)
+                        Text(L10n.settingsInstruction).font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(.center).padding(.horizontal)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.isLoading && viewModel.createdMRs.isEmpty && viewModel.assignedMRs.isEmpty {
@@ -57,23 +56,19 @@ struct ContentView: View {
     var footer: some View {
         HStack {
             SettingsLink { Image(systemName: "gearshape") }.buttonStyle(.plain)
-            
             Button { Task { await viewModel.fetchAll(token: apiToken) } } label: {
                 Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.plain)
-            
+            }.buttonStyle(.plain)
             Spacer()
             if viewModel.isLoading { ProgressView().controlSize(.small) }
             Spacer()
-            
             Button(L10n.quit) { NSApplication.shared.terminate(nil) }.controlSize(.small)
         }
-        .padding(12)
-        .background(Color(NSColor.windowBackgroundColor))
+        .padding(12).background(Color(NSColor.windowBackgroundColor))
     }
 }
 
+// Composant pour chaque ligne
 struct MRRow: View {
     let mr: MergeRequest
     var body: some View {
@@ -92,7 +87,6 @@ struct MRRow: View {
                     }
                     Text(mr.title).fontWeight(.semibold).font(.system(size: 14)).lineLimit(2)
                 }
-                
                 HStack(spacing: 4) {
                     Text(mr.references.full).fontWeight(.bold)
                     Text("•")
@@ -113,8 +107,7 @@ struct MRRow: View {
                 }
             }
         }
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
+        .padding(.vertical, 8).contentShape(Rectangle())
         .onTapGesture { if let url = URL(string: mr.webUrl) { NSWorkspace.shared.open(url) } }
     }
     
@@ -126,6 +119,7 @@ struct MRRow: View {
     }
 }
 
+// --- VUE DES RÉGLAGES ---
 struct SettingsView: View {
     @AppStorage("gitlabToken") private var apiToken: String = ""
     var body: some View {
@@ -143,11 +137,11 @@ struct SettingsView: View {
     }
 }
 
+// --- EXTENSIONS ---
 extension Date {
     func relativeTime() -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        // Utilise la langue détectée pour le temps relatif
         formatter.locale = Locale(identifier: L10n.language)
         return formatter.localizedString(for: self, relativeTo: Date())
     }
