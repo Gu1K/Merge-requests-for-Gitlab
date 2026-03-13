@@ -68,7 +68,6 @@ struct ContentView: View {
     }
 }
 
-// Composant pour chaque ligne
 struct MRRow: View {
     let mr: MergeRequest
     var body: some View {
@@ -119,25 +118,33 @@ struct MRRow: View {
     }
 }
 
-// --- VUE DES RÉGLAGES ---
 struct SettingsView: View {
     @AppStorage("gitlabToken") private var apiToken: String = ""
+    @AppStorage("refreshInterval") private var refreshInterval: Double = 30.0
+    
     var body: some View {
         Form {
             Section {
                 SecureField("GitLab Personal Access Token :", text: $apiToken)
                     .textFieldStyle(.roundedBorder)
-                Text(L10n.tokenScopeNote).font(.caption).foregroundColor(.secondary)
             } header: {
                 Text(L10n.configTitle).fontWeight(.bold)
             }
+            
+            Section {
+                Picker(L10n.refreshDelay, selection: $refreshInterval) {
+                    Text("15 \(L10n.seconds)").tag(15.0)
+                    Text("30 \(L10n.seconds)").tag(30.0)
+                    Text("1 \(L10n.minute)").tag(60.0)
+                    Text("2 \(L10n.minute)s").tag(120.0)
+                    Text("5 \(L10n.minute)s").tag(300.0)
+                }
+            }
         }
-        .padding(30)
-        .frame(width: 450, height: 150)
+        .padding(30).frame(width: 450, height: 200)
     }
 }
 
-// --- EXTENSIONS ---
 extension Date {
     func relativeTime() -> String {
         let formatter = RelativeDateTimeFormatter()

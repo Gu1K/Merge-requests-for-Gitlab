@@ -1,7 +1,7 @@
 import SwiftUI
 import Combine
 
-// --- MODÈLES DE DONNÉES ---
+// --- MODÈLES ---
 
 struct MergeRequest: Identifiable, Decodable, Hashable {
     let id: Int
@@ -26,19 +26,11 @@ struct MergeRequest: Identifiable, Decodable, Hashable {
 struct Author: Decodable, Hashable {
     let name: String
     let avatarUrl: String?
-    enum CodingKeys: String, CodingKey {
-        case name
-        case avatarUrl = "avatar_url"
-    }
+    enum CodingKeys: String, CodingKey { case name, avatarUrl = "avatar_url" }
 }
 
-struct Reference: Decodable, Hashable {
-    let full: String
-}
-
-struct GitLabUser: Decodable {
-    let id: Int
-}
+struct Reference: Decodable, Hashable { let full: String }
+struct GitLabUser: Decodable { let id: Int }
 
 // --- VIEWMODEL ---
 
@@ -49,7 +41,8 @@ class GitLabViewModel: ObservableObject {
     @Published var isLoading = false
     
     private var cancellables = Set<AnyCancellable>()
-    
+    private var timerCancellable: AnyCancellable?
+
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         let formatter = DateFormatter()
@@ -59,23 +52,33 @@ class GitLabViewModel: ObservableObject {
     }()
     
     init() {
-        // Rafraîchissement automatique toutes les 30 secondes
-        Timer.publish(every: 30, on: .main, in: .common)
+        setupTimer()
+        
+        // Réagir au changement de délai dans les réglages
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.setupTimer() }
+            }
+            .store(in: &cancellables)
+    }
+    
+    func setupTimer() {
+        timerCancellable?.cancel()
+        let interval = UserDefaults.standard.double(forKey: "refreshInterval")
+        let finalInterval = interval > 0 ? interval : 30.0
+        
+        timerCancellable = Timer.publish(every: finalInterval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 guard let self = self else { return }
                 let token = UserDefaults.standard.string(forKey: "gitlabToken") ?? ""
                 Task { await self.fetchAll(token: token) }
             }
-            .store(in: &cancellables)
     }
     
     func fetchAll(token: String) async {
         guard !token.isEmpty else { return }
-        
-        if createdMRs.isEmpty && assignedMRs.isEmpty {
-            isLoading = true
-        }
+        if createdMRs.isEmpty && assignedMRs.isEmpty { isLoading = true }
         
         do {
             let currentUser = try await fetchCurrentUser(token: token)
@@ -87,13 +90,10 @@ class GitLabViewModel: ObservableObject {
             
             let authoredList = try await authored
             let assignedList = try await assigned
-            let reviewsList = try await reviews
-            
             let combined = Array(Set(authoredList + assignedList)).sorted(by: { $0.createdAt > $1.createdAt })
             
             self.createdMRs = combined
-            self.assignedMRs = reviewsList.sorted(by: { $0.createdAt > $1.createdAt })
-            
+            self.assignedMRs = try await reviews
         } catch {
             print("Erreur GitLab : \(error)")
         }

@@ -2,7 +2,7 @@ import Foundation
 
 enum L10n {
     static var language: String {
-        Bundle.main.preferredLocalizations.first ?? "en"
+        Locale.preferredLanguages.first ?? "en"
     }
     
     static var isFrench: Bool { language.hasPrefix("fr") }
@@ -19,4 +19,7 @@ enum L10n {
     static var createdBy: String { isFrench ? "par" : "by" }
     static var configTitle: String { isFrench ? "Configuration" : "Settings" }
     static var tokenScopeNote: String { isFrench ? "Nécessite le scope 'read_api'." : "Requires 'read_api' scope." }
+    static var refreshDelay: String { isFrench ? "Délai de rafraîchissement" : "Refresh Delay" }
+    static var seconds: String { isFrench ? "secondes" : "seconds" }
+    static var minute: String { isFrench ? "minute" : "minute" }
 }
