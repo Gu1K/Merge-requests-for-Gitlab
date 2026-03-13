@@ -7,10 +7,9 @@ struct ContentView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Sélecteur d'onglets
             Picker("", selection: $selectedTab) {
-                Text("Mes MRs (\(viewModel.createdMRs.count))").tag(0)
-                Text("À réviser (\(viewModel.assignedMRs.count))").tag(1)
+                Text("\(L10n.tabMine) (\(viewModel.createdMRs.count))").tag(0)
+                Text("\(L10n.tabReview) (\(viewModel.assignedMRs.count))").tag(1)
             }
             .pickerStyle(.segmented)
             .padding()
@@ -19,15 +18,15 @@ struct ContentView: View {
                 if apiToken.isEmpty {
                     VStack(spacing: 15) {
                         Image(systemName: "key.fill").font(.system(size: 40))
-                        Text("Token manquant").font(.headline)
-                        Text("Ouvrez les réglages (⌘,) pour configurer l'accès.")
-                            .font(.subheadline).foregroundColor(.secondary)
+                        Text(L10n.tokenMissing).font(.headline)
+                        Text(L10n.settingsInstruction)
+                            .font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(.center).padding(.horizontal)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.isLoading && viewModel.createdMRs.isEmpty && viewModel.assignedMRs.isEmpty {
                     VStack(spacing: 10) {
                         ProgressView()
-                        Text("Synchronisation GitLab...").font(.caption).foregroundColor(.secondary)
+                        Text(L10n.syncGitLab).font(.caption).foregroundColor(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -35,7 +34,7 @@ struct ContentView: View {
                     if mrs.isEmpty {
                         VStack(spacing: 10) {
                             Image(systemName: "sun.max").font(.system(size: 30))
-                            Text("Rien à signaler").font(.headline)
+                            Text(L10n.nothingToReport).font(.headline)
                         }
                         .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -57,28 +56,18 @@ struct ContentView: View {
     
     var footer: some View {
         HStack {
-            SettingsLink {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(.plain)
+            SettingsLink { Image(systemName: "gearshape") }.buttonStyle(.plain)
             
-            Button {
-                Task { await viewModel.fetchAll(token: apiToken) }
-            } label: {
+            Button { Task { await viewModel.fetchAll(token: apiToken) } } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.plain)
             
             Spacer()
-            
-            if viewModel.isLoading {
-                ProgressView().controlSize(.small)
-            }
-            
+            if viewModel.isLoading { ProgressView().controlSize(.small) }
             Spacer()
             
-            Button("Quitter") { NSApplication.shared.terminate(nil) }
-                .controlSize(.small)
+            Button(L10n.quit) { NSApplication.shared.terminate(nil) }.controlSize(.small)
         }
         .padding(12)
         .background(Color(NSColor.windowBackgroundColor))
@@ -87,56 +76,37 @@ struct ContentView: View {
 
 struct MRRow: View {
     let mr: MergeRequest
-    
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            // Avatar de l'auteur
             AsyncImage(url: URL(string: mr.author.avatarUrl ?? "")) { image in
                 image.resizable()
             } placeholder: {
                 Circle().fill(Color.gray.opacity(0.3))
             }
-            .frame(width: 34, height: 34)
-            .clipShape(Circle())
+            .frame(width: 34, height: 34).clipShape(Circle())
             
             VStack(alignment: .leading, spacing: 6) {
-                // Titre
                 HStack(alignment: .top) {
                     if mr.draft {
-                        Text("DRAFT")
-                            .font(.system(size: 9, weight: .bold))
-                            .padding(.horizontal, 4).padding(.vertical, 2)
-                            .background(Color.gray.opacity(0.2)).cornerRadius(4)
+                        Text("DRAFT").font(.system(size: 9, weight: .bold)).padding(.horizontal, 4).padding(.vertical, 2).background(Color.gray.opacity(0.2)).cornerRadius(4)
                     }
-                    Text(mr.title)
-                        .fontWeight(.semibold)
-                        .font(.system(size: 14))
-                        .lineLimit(2)
+                    Text(mr.title).fontWeight(.semibold).font(.system(size: 14)).lineLimit(2)
                 }
                 
-                // Métadonnées
                 HStack(spacing: 4) {
                     Text(mr.references.full).fontWeight(.bold)
                     Text("•")
-                    Text("par \(mr.author.name)")
+                    Text("\(L10n.createdBy) \(mr.author.name)")
                     Text("•")
                     Text(mr.createdAt.relativeTime())
                 }
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
+                .font(.system(size: 11)).foregroundColor(.secondary)
 
-                // Labels
                 if !mr.labels.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(mr.labels, id: \.self) { label in
-                                Text(label)
-                                    .font(.system(size: 10, weight: .bold))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(labelColor(label).opacity(0.15))
-                                    .foregroundColor(labelColor(label))
-                                    .cornerRadius(6)
+                                Text(label).font(.system(size: 10, weight: .bold)).padding(.horizontal, 8).padding(.vertical, 3).background(labelColor(label).opacity(0.15)).foregroundColor(labelColor(label)).cornerRadius(6)
                             }
                         }
                     }
@@ -152,7 +122,6 @@ struct MRRow: View {
         let l = label.lowercased()
         if l.contains("feature") || l.contains("🚀") { return .blue }
         if l.contains("bug") || l.contains("🐛") { return .red }
-        if l.contains("enhancement") || l.contains("amélioration") { return .green }
         return .secondary
     }
 }
@@ -164,8 +133,9 @@ struct SettingsView: View {
             Section {
                 SecureField("GitLab Personal Access Token :", text: $apiToken)
                     .textFieldStyle(.roundedBorder)
+                Text(L10n.tokenScopeNote).font(.caption).foregroundColor(.secondary)
             } header: {
-                Text("Configuration").fontWeight(.bold)
+                Text(L10n.configTitle).fontWeight(.bold)
             }
         }
         .padding(30)
@@ -177,7 +147,8 @@ extension Date {
     func relativeTime() -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        formatter.locale = Locale(identifier: "fr_FR")
+        // Utilise la langue détectée pour le temps relatif
+        formatter.locale = Locale(identifier: L10n.language)
         return formatter.localizedString(for: self, relativeTo: Date())
     }
 }

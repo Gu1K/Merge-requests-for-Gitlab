@@ -86,11 +86,12 @@
 				};
 			};
 			buildConfigurationList = EDF990E82F64137E004CA76B /* Build configuration list for PBXProject "Merge requests for Gitlab" */;
-			developmentRegion = en;
+			developmentRegion = fr;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
+				fr,
 			);
 			mainGroup = EDF990E42F64137E004CA76B;
 			minimizedProjectReferenceProxies = 1;
