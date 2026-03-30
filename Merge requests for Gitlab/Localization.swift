@@ -24,4 +24,10 @@ enum L10n {
     static var helpSettings: String { isFrench ? "Paramètres" : "Settings" }
     static var helpRefresh: String { isFrench ? "Rafraîchir maintenant" : "Refresh now" }
     static var helpMarkRead: String { isFrench ? "Marquer tout comme lu" : "Mark all as read" }
+    
+    static func notifNewMRs(_ count: Int) -> String {
+        isFrench ? "Nouvelle MR à reviewer (\(count))." : "New MR to review (\(count))."
+    }
+    
+    static var notifReviewTitle: String { isFrench ? "À réviser" : "To Review" }
 }

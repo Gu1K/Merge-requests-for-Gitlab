@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UserNotifications
 
 struct Author: Decodable, Hashable {
     let name: String
@@ -55,6 +56,8 @@ class GitLabViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var timerCancellable: AnyCancellable?
     
+    private var lastAssignedMRIDs: Set<Int> = []
+    
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
         let f = DateFormatter()
@@ -65,6 +68,7 @@ class GitLabViewModel: ObservableObject {
     
     init() {
         setupTimer()
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .sink { [weak self] _ in Task { @MainActor in self?.setupTimer() } }
             .store(in: &cancellables)
@@ -106,6 +110,13 @@ class GitLabViewModel: ObservableObject {
             mine = await fetchStatusForList(mrs: mine, token: token)
             toReview = await fetchStatusForList(mrs: toReview, token: token)
             
+            let newMRIDs = Set(toReview.map { $0.id })
+            let unseen = newMRIDs.subtracting(lastAssignedMRIDs)
+            if !lastAssignedMRIDs.isEmpty && !unseen.isEmpty {
+                sendNotification(newCount: unseen.count)
+            }
+            lastAssignedMRIDs = newMRIDs
+            
             self.createdMRs = mine.sorted(by: { $0.createdAt > $1.createdAt })
             self.assignedMRs = toReview.sorted(by: { $0.createdAt > $1.createdAt })
             self.refreshID = UUID()
@@ -142,5 +153,17 @@ class GitLabViewModel: ObservableObject {
         guard let url = URL(string: urlString) else { return [] }
         var r = URLRequest(url: url); r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (d, _) = try await URLSession.shared.data(for: r); return try decoder.decode([MergeRequest].self, from: d)
+    }
+    
+    private func sendNotification(newCount: Int) {
+        let center = UNUserNotificationCenter.current()
+        let title = L10n.notifReviewTitle
+        let body = L10n.notifNewMRs(newCount)
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        center.add(request)
     }
 }
