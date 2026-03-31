@@ -13,6 +13,7 @@ A lightweight and native macOS menu bar application to monitor your GitLab Merge
 - **Dual View**: 
   - **My MRs**: Shows all Merge Requests you created or are assigned to.
   - **To Review**: Lists MRs where you are designated as a reviewer.
+- **Native Push Notifications**: Get alerted instantly when a new Merge Request is assigned to you for review.
 - **Real-time Counters**: Dynamic counts directly in the tab headers.
 - **Auto-Refresh**: Customizable background sync (15s to 5min).
 - **Native Look & Feel**:
