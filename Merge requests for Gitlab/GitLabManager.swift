@@ -3,14 +3,20 @@ import Combine
 import UserNotifications
 
 struct Author: Decodable, Hashable {
+    let id: Int
     let name: String
     let avatarUrl: String?
-    enum CodingKeys: String, CodingKey { case name, avatarUrl = "avatar_url" }
+    enum CodingKeys: String, CodingKey { case id, name, avatarUrl = "avatar_url" }
 }
 
 struct Reference: Decodable, Hashable { let full: String }
 struct GitLabUser: Decodable { let id: Int }
-struct MRApprovals: Decodable { let approved: Bool; let approvals_required: Int? }
+
+struct MRApprovals: Decodable {
+    let approved: Bool
+    let approved_by: [ApprovalUser]?
+    struct ApprovalUser: Decodable { let user: Author }
+}
 
 enum ApprovalStatus: Hashable { case none, approved, requestChanges }
 
@@ -56,8 +62,6 @@ class GitLabViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var timerCancellable: AnyCancellable?
     
-    private var lastAssignedMRIDs: Set<Int> = []
-    
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
         let f = DateFormatter()
@@ -67,8 +71,8 @@ class GitLabViewModel: ObservableObject {
     }()
     
     init() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         setupTimer()
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .sink { [weak self] _ in Task { @MainActor in self?.setupTimer() } }
             .store(in: &cancellables)
@@ -93,6 +97,15 @@ class GitLabViewModel: ObservableObject {
         }
         refreshID = UUID()
     }
+
+    private func sendNotification(title: String, body: String, id: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
     
     func fetchAll(token: String) async {
         guard !token.isEmpty else { return }
@@ -104,21 +117,14 @@ class GitLabViewModel: ObservableObject {
             async let ass = fetchMRs(token: token, endpoint: "state=opened&scope=all&assignee_id=\(currentUser.id)")
             async let rev = fetchMRs(token: token, endpoint: "state=opened&scope=all&reviewer_id=\(currentUser.id)")
             
-            var mine = Array(Set(try await auth + (try await ass)))
-            var toReview = try await rev
+            var fetchedMine = Array(Set(try await auth + (try await ass)))
+            var fetchedToReview = try await rev
             
-            mine = await fetchStatusForList(mrs: mine, token: token)
-            toReview = await fetchStatusForList(mrs: toReview, token: token)
+            fetchedMine = await fetchStatusForList(mrs: fetchedMine, token: token, userId: currentUser.id, isReviewTab: false)
+            fetchedToReview = await fetchStatusForList(mrs: fetchedToReview, token: token, userId: currentUser.id, isReviewTab: true)
             
-            let newMRIDs = Set(toReview.map { $0.id })
-            let unseen = newMRIDs.subtracting(lastAssignedMRIDs)
-            if !lastAssignedMRIDs.isEmpty && !unseen.isEmpty {
-                sendNotification(newCount: unseen.count)
-            }
-            lastAssignedMRIDs = newMRIDs
-            
-            self.createdMRs = mine.sorted(by: { $0.createdAt > $1.createdAt })
-            self.assignedMRs = toReview.sorted(by: { $0.createdAt > $1.createdAt })
+            self.createdMRs = fetchedMine.sorted(by: { $0.createdAt > $1.createdAt })
+            self.assignedMRs = fetchedToReview.sorted(by: { $0.createdAt > $1.createdAt })
             self.refreshID = UUID()
         } catch {
             print("Erreur : \(error)")
@@ -126,11 +132,31 @@ class GitLabViewModel: ObservableObject {
         isLoading = false
     }
     
-    private func fetchStatusForList(mrs: [MergeRequest], token: String) async -> [MergeRequest] {
+    private func fetchStatusForList(mrs: [MergeRequest], token: String, userId: Int, isReviewTab: Bool) async -> [MergeRequest] {
         var enriched = mrs
         for i in 0..<enriched.count {
-            if let approvals = try? await fetchApprovals(token: token, projectId: enriched[i].project_id, mrIid: enriched[i].iid) {
-                if approvals.approved { enriched[i].approvalStatus = .approved }
+            let mr = enriched[i]
+            
+            if let approvals = try? await fetchApprovals(token: token, projectId: mr.project_id, mrIid: mr.iid) {
+                let userHasApproved = approvals.approved_by?.contains(where: { $0.user.id == userId }) ?? false
+                
+                if isReviewTab {
+                    if userHasApproved {
+                        enriched[i].approvalStatus = .approved
+                    } else {
+                        let discussions = try? await fetchDiscussions(token: token, projectId: mr.project_id, mrIid: mr.iid)
+                        let hasUnresolved = discussions?.contains { $0.notes.contains { $0.resolvable == true && $0.resolved == false } } ?? false
+                        enriched[i].approvalStatus = (hasUnresolved || !userHasApproved) ? .requestChanges : .none
+                    }
+                } else {
+                    if approvals.approved {
+                        enriched[i].approvalStatus = .approved
+                    } else {
+                        let discussions = try? await fetchDiscussions(token: token, projectId: mr.project_id, mrIid: mr.iid)
+                        let hasOthersUnresolved = discussions?.contains { $0.notes.contains { ($0.resolvable == true && $0.resolved == false) && $0.author.id != userId } } ?? false
+                        enriched[i].approvalStatus = hasOthersUnresolved ? .requestChanges : .none
+                    }
+                }
             }
         }
         return enriched
@@ -140,6 +166,20 @@ class GitLabViewModel: ObservableObject {
         let url = URL(string: "https://gitlab.com/api/v4/projects/\(projectId)/merge_requests/\(mrIid)/approvals")!
         var r = URLRequest(url: url); r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (d, _) = try await URLSession.shared.data(for: r); return try decoder.decode(MRApprovals.self, from: d)
+    }
+
+    struct Discussion: Decodable { let notes: [Note] }
+    struct Note: Decodable {
+        let author: AuthorID
+        let resolvable: Bool?
+        let resolved: Bool?
+    }
+    struct AuthorID: Decodable { let id: Int }
+
+    private func fetchDiscussions(token: String, projectId: Int, mrIid: Int) async throws -> [Discussion] {
+        let url = URL(string: "https://gitlab.com/api/v4/projects/\(projectId)/merge_requests/\(mrIid)/discussions")!
+        var r = URLRequest(url: url); r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (d, _) = try await URLSession.shared.data(for: r); return try decoder.decode([Discussion].self, from: d)
     }
 
     private func fetchCurrentUser(token: String) async throws -> GitLabUser {
@@ -153,17 +193,5 @@ class GitLabViewModel: ObservableObject {
         guard let url = URL(string: urlString) else { return [] }
         var r = URLRequest(url: url); r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (d, _) = try await URLSession.shared.data(for: r); return try decoder.decode([MergeRequest].self, from: d)
-    }
-    
-    private func sendNotification(newCount: Int) {
-        let center = UNUserNotificationCenter.current()
-        let title = L10n.notifReviewTitle
-        let body = L10n.notifNewMRs(newCount)
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request)
     }
 }

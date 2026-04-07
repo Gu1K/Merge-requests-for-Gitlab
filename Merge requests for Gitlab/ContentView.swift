@@ -100,12 +100,7 @@ struct MRRow: View {
                     .clipShape(Circle())
                     .overlay(Circle().stroke(statusColor, lineWidth: mr.approvalStatus != .none ? 3 : 0))
 
-                    if mr.approvalStatus == .approved {
-                        Image(systemName: "checkmark.seal.fill")
-                            .resizable().frame(width: 14, height: 14)
-                            .foregroundColor(.green).background(Color.white.clipShape(Circle()))
-                            .offset(x: 4, y: 4)
-                    }
+                    statusOverlay
                 }
                 
                 if mr.userNotesCount > 0 {
@@ -125,8 +120,12 @@ struct MRRow: View {
                     if mr.draft {
                         Text("DRAFT").font(.system(size: 9, weight: .bold)).padding(.horizontal, 4).padding(.vertical, 2).background(Color.gray.opacity(0.2)).cornerRadius(4)
                     }
-                    Text(mr.title).fontWeight(.semibold).font(.system(size: 14)).lineLimit(2)
-                        .foregroundColor(mr.approvalStatus == .approved ? .secondary : .primary)
+
+                    Text(mr.title)
+                        .fontWeight(.semibold)
+                        .font(.system(size: 14))
+                        .lineLimit(2)
+                        .foregroundColor(.primary)
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
@@ -150,6 +149,22 @@ struct MRRow: View {
         .onTapGesture { if let url = URL(string: mr.webUrl) { NSWorkspace.shared.open(url) } }
     }
     
+    var statusOverlay: some View {
+        Group {
+            if mr.approvalStatus == .approved {
+                Image(systemName: "checkmark.seal.fill")
+                    .resizable().frame(width: 14, height: 14)
+                    .foregroundColor(.green).background(Color.white.clipShape(Circle()))
+                    .offset(x: 4, y: 4)
+            } else if mr.approvalStatus == .requestChanges {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .resizable().frame(width: 14, height: 14)
+                    .foregroundColor(.red).background(Color.white.clipShape(Circle()))
+                    .offset(x: 4, y: 4)
+            }
+        }
+    }
+
     var statusColor: Color {
         switch mr.approvalStatus {
         case .approved: return .green
