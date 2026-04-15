@@ -167,8 +167,8 @@ struct MRRow: View {
 
     var statusColor: Color {
         switch mr.approvalStatus {
-        case .approved: return .green
         case .requestChanges: return .red
+        case .approved: return .green
         default: return .clear
         }
     }

@@ -142,7 +142,17 @@ class GitLabViewModel: ObservableObject {
                 
                 if isReviewTab {
                     if userHasApproved {
-                        enriched[i].approvalStatus = .approved
+                        let discussions = try? await fetchDiscussions(token: token, projectId: mr.project_id, mrIid: mr.iid)
+                        let hasRequestedChanges = discussions?.contains {
+                            $0.notes.contains {
+                                ($0.resolvable == true && $0.resolved == false)
+                            }
+                        } ?? false
+                        if hasRequestedChanges {
+                            enriched[i].approvalStatus = .requestChanges
+                        } else {
+                            enriched[i].approvalStatus = .approved
+                        }
                     } else {
                         let discussions = try? await fetchDiscussions(token: token, projectId: mr.project_id, mrIid: mr.iid)
                         let hasUnresolved = discussions?.contains { $0.notes.contains { $0.resolvable == true && $0.resolved == false } } ?? false
@@ -150,11 +160,15 @@ class GitLabViewModel: ObservableObject {
                     }
                 } else {
                     if approvals.approved {
-                        enriched[i].approvalStatus = .approved
-                    } else {
                         let discussions = try? await fetchDiscussions(token: token, projectId: mr.project_id, mrIid: mr.iid)
                         let hasOthersUnresolved = discussions?.contains { $0.notes.contains { ($0.resolvable == true && $0.resolved == false) && $0.author.id != userId } } ?? false
-                        enriched[i].approvalStatus = hasOthersUnresolved ? .requestChanges : .none
+                        if hasOthersUnresolved {
+                            enriched[i].approvalStatus = .requestChanges
+                        } else {
+                            enriched[i].approvalStatus = .approved
+                        }
+                    } else {
+                        enriched[i].approvalStatus = .none
                     }
                 }
             }
